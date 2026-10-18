@@ -1,0 +1,7 @@
+[build]
+  publish = "dist"
+  command = ""
+
+[build.environment]
+  NODE_VERSION = "22"
+  NETLIFY_SKIP_INSTALL = "true"
