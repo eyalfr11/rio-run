@@ -91,7 +91,7 @@ function closeScores(){
 function openMenu(){if(mode==='play')pause();else if(mode==='intro')returnHome();}
 function action(a){if(mode!=='play')return;if(a==='left')lane=Math.max(-1,lane-1);if(a==='right')lane=Math.min(1,lane+1);if(a==='jump'&&jump===0){duck=0;vy=8.4;beep(420,.13);}if(a==='duck'&&jump===0){duck=.85;beep(220,.08);}}
 $('stop-game').onclick=$('exit-home').onclick=returnHome;
-$('intro-exit').onclick=$('modal-exit').onclick=$('play-exit').onclick=exitGame;
+$('intro-exit').onclick=$('modal-exit').onclick=exitGame;
 $('menu').onclick=openMenu;$('modal-home').onclick=returnHome;
 $('scores-open').onclick=$('intro-scores').onclick=$('result-scores').onclick=openScores;$('scores-close').onclick=$('scores-back').onclick=closeScores;$('scores-level').onchange=renderScores;
 document.querySelector('.brand').onclick=e=>{e.preventDefault();if(mode==='play'||mode==='paused')openMenu();else returnHome();};

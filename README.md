@@ -39,7 +39,7 @@ Attribution and licenses: `dist/assets/CREDITS.txt`, `THREE-LICENSE.txt`, `RUNNE
 
 ## Menus and results
 
-Use the Menu button or Esc to pause, resume, start over or return to the title screen and choose a different difficulty. The visible Stop game button ends the current run and immediately returns to difficulty selection. Exit game ends the run, suspends rendering and audio, and shows an exit screen. Browsers may require the player to close the tab manually. The exit screen also offers a separate link to the Rio website.
+Use the Menu button or Esc to pause, resume, start over or return to the title screen and choose a different difficulty. On phones, swipe to move, jump or duck; on-screen arrow buttons appear only on desktop. The compact Stop game button in the bottom corner ends the current run and immediately returns to difficulty selection. Exit game ends the run, suspends rendering and audio, and shows an exit screen. Browsers may require the player to close the tab manually. The exit screen also offers a separate link to the Rio website.
 
 Enter an optional player name on the title screen. Completed and abandoned runs appear in Recent results. Each difficulty has its own fastest-victory leaderboard. Scores are saved in this browser's localStorage only; they are not shared across devices.
 
