@@ -1,9 +1,11 @@
+import {readScores,appendScore,leaderboard,recentScores,formatTime,escapeHTML} from './scores.js';
 import * as T from './assets/three.module.js';
 import {headPoseWeights} from './head-turn.js';
 import {createWorld,createRunner} from './world.js';
 import {LEVELS,clamp,chaseProgress,pace,collides,wavePlan} from './rules.js?v=3';
 const $=id=>document.getElementById(id),start=$('start');start.disabled=true;
 let renderer;try{renderer=new T.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});}catch(e){$('error').hidden=false;throw e;}
+renderer.domElement.tabIndex=0;
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;$('world').appendChild(renderer.domElement);
 const world=createWorld(renderer),{scene,M,mesh,box}=world;const camera=new T.PerspectiveCamera(50,1,.1,240),runner=createRunner(scene,M,mesh,box);
 const tex=new T.TextureLoader().load('assets/rio-run-sheet.png',()=>{start.disabled=false;$('loading').textContent='מוכן למחשב ולטלפון · בלי התקנה';},undefined,()=>{$('loading').textContent='לא הצלחנו לטעון את ריו. רעננו את הדף.';});tex.colorSpace=T.SRGBColorSpace;tex.repeat.set(.5,.5);tex.magFilter=T.LinearFilter;
@@ -28,6 +30,8 @@ dogMaterial.customProgramCacheKey=()=> 'rio-full-frame-head-blend-v1';
 const rio=new T.Sprite(dogMaterial);scene.add(rio);const shadow=mesh(new T.CircleGeometry(.7,32),new T.MeshBasicMaterial({color:0x243428,transparent:true,opacity:.25,depthWrite:false}));shadow.rotation.x=-Math.PI/2;shadow.position.y=.018;scene.add(shadow);
 const objects=[],sparks=[],quotes=['מכיר, מכיר. אבל לא עוצר.','הטיול שלכם. המסלול שלי.','אני לא מתעלם. אני פשוט לא רואה חטיף.','לא מציק לא מציק, מניח…','שמח!','קודם תראה מה הבאת.','הפרווה טבעית. הפוזה מקצועית.'];
 let mode='intro',level='normal',lane=0,playerX=0,jump=0,vy=0,duck=0,hearts=3,bones=0,totalBones=0,distance=0,progress=0,invincible=0,spawn=0,elapsed=0,combo=0,shake=0,clock=0,last=0,quoteClock=0,wave=0,muted=true,audio,finishTime=0;
+let runSaved=true,scoreReturnMode='intro',scoreFocus=null,scores=[],scoresPersisted=true;
+try{scores=readScores(localStorage);$('player-name').value=localStorage.getItem('rio-run-player')||'';}catch{}
 let best=0;try{best=Number(localStorage.getItem('rio-run-best-v2')||0);}catch{}if(best)$('best').textContent=`השיא המקומי שלכם: ${best} מטר`;
 function beep(freq=640,duration=.1,type='sine'){if(muted)return;try{audio??=new (window.AudioContext||window.webkitAudioContext)();audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(freq,audio.currentTime);o.frequency.exponentialRampToValueAtTime(freq*.65,audio.currentTime+duration);g.gain.setValueAtTime(.06,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+duration);}catch{}}
 function say(t){$('quote').textContent=t;quoteClock=0;}
@@ -47,14 +51,55 @@ function disposeObject(o){o.g.traverse(n=>{if(n.geometry)n.geometry.dispose();})
 function clear(){objects.forEach(disposeObject);objects.length=0;sparks.forEach(p=>{scene.remove(p.o);p.o.material.dispose();});sparks.length=0;}
 function updateHUD(){progress=chaseProgress(bones,LEVELS[level].target);$('meters').textContent=Math.floor(distance);$('bones').textContent=`${bones} / ${LEVELS[level].target}`;$('hearts').innerHTML=Array.from({length:3},(_,i)=>`<span class="${i<hearts?'heart-full':'heart-lost'}" aria-hidden="true">${i<hearts?'♥':'♡'}</span>`).join('');$('hearts').setAttribute('aria-label',`נותרו ${hearts} פסילות מתוך 3`);$('progress').style.width=(progress*100)+'%';$('gap').textContent=progress>=1?'ריו בידיים שלכם!':`עוד ${LEVELS[level].target-bones} חטיפים לתפיסה · ${Math.ceil((1-progress)*20)} מ׳ מריו`;$('pace').textContent=`קצב ${pace(level,elapsed).stage} / 4`;}
 function levelText(){const c=LEVELS[level];$('mission').innerHTML=`<b>איך מנצחים?</b> אוספים <strong>${c.target} חטיפים</strong> כדי לתפוס את ריו. כל חטיף מקרב; פגיעה מאבדת לב וחטיף אחד.<small>${c.trail===1?'חטיף בודד ליד מכשול':c.trail+' חטיפים בכל רצף'} · המהירות עולה לאורך המרדף</small>`;}
-function begin(){clear();mode='play';lane=playerX=jump=vy=duck=0;hearts=3;bones=totalBones=distance=progress=elapsed=combo=invincible=shake=0;spawn=.65;wave=0;finishTime=0;$('intro').hidden=$('hero-label').hidden=$('modal').hidden=true;$('hud').hidden=$('mobile-controls').hidden=$('pause').hidden=false;document.body.classList.add('playing');$('combo').textContent='';say(`אוספים ${LEVELS[level].target} חטיפים — ותופסים את ריו!`);updateHUD();beep(480,.18);}
-function finish(win){mode=win?'catch':'end';finishTime=0;best=Math.max(best,Math.floor(distance));try{localStorage.setItem('rio-run-best-v2',String(best));}catch{}$('resume').hidden=true;$('restart').textContent='עוד מרדף ←';$('result-kicker').textContent=win?'הוד פרוותו נכנע. זמנית.':'למלך יש תוכניות אחרות';$('result-title').textContent=win?'תפסתם את ריו!':'ריו: 1. אתם: 0.';$('result-text').textContent=win?'״אפשר עוד טיול. התעריף הוא חטיף.״':'״אני לא בורח. אני פשוט לא רואה חטיף ביד שלך.״';$('result-stats').textContent=`${Math.floor(distance)} מטר · ${totalBones} חטיפים נאספו · ${LEVELS[level].name}`;if(!win)$('modal').hidden=false;else{say('תפסתם! עכשיו אפשר לצאת לטיול.');burst(playerX,-2,0xdbfc73,32);}beep(win?900:180,.4);}
-function pause(){if(mode==='play'){mode='paused';$('modal').hidden=false;$('resume').hidden=false;$('result-kicker').textContent='הפסקת חטיף';$('result-title').textContent='גם לבוס מגיע לנוח.';$('result-text').textContent='המרדף ימשיך בדיוק מאיפה שעצרתם.';$('result-stats').textContent='';$('restart').textContent='להתחיל מחדש';}else if(mode==='paused'){mode='play';$('modal').hidden=true;}}
+function begin(){if(!runSaved)saveRun('quit');clear();$('scores-panel').hidden=true;runSaved=false;mode='play';lane=playerX=jump=vy=duck=0;hearts=3;bones=totalBones=distance=progress=elapsed=combo=invincible=shake=0;spawn=.65;wave=0;finishTime=0;$('intro').hidden=$('hero-label').hidden=$('modal').hidden=true;$('hud').hidden=$('mobile-controls').hidden=$('pause').hidden=$('menu').hidden=false;document.body.classList.add('playing');$('combo').textContent='';say(`אוספים ${LEVELS[level].target} חטיפים — ותופסים את ריו!`);updateHUD();renderer.domElement.focus?.();beep(480,.18);}
+function finish(win){saveRun(win?'win':'loss');mode=win?'catch':'end';finishTime=0;best=Math.max(best,Math.floor(distance));try{localStorage.setItem('rio-run-best-v2',String(best));}catch{}$('resume').hidden=true;$('restart').textContent='עוד מרדף ←';$('result-kicker').textContent=win?'הוד פרוותו נכנע. זמנית.':'למלך יש תוכניות אחרות';$('result-title').textContent=win?'תפסתם את ריו!':'ריו: 1. אתם: 0.';$('result-text').textContent=win?'״אפשר עוד טיול. התעריף הוא חטיף.״':'״אני לא בורח. אני פשוט לא רואה חטיף ביד שלך.״';$('result-stats').textContent=`זמן ${formatTime(elapsed)} · ${Math.floor(distance)} מטר · ${totalBones} חטיפים · ${LEVELS[level].name}`;if(!win){$('modal').hidden=false;$('restart').focus?.();}else{say('תפסתם! עכשיו אפשר לצאת לטיול.');burst(playerX,-2,0xdbfc73,32);}beep(win?900:180,.4);}
+function pause(){if(mode==='play'){mode='paused';$('modal').hidden=false;$('resume').hidden=false;$('result-kicker').textContent='הפסקת חטיף';$('result-title').textContent='גם לבוס מגיע לנוח.';$('result-text').textContent='המרדף ימשיך בדיוק מאיפה שעצרתם.';$('result-stats').textContent='';$('restart').textContent='להתחיל מחדש';$('resume').focus?.();}else if(mode==='paused'){mode='play';$('modal').hidden=true;renderer.domElement.focus?.();}}
+function saveRun(outcome){
+ if(runSaved)return;runSaved=true;
+ const player=($('player-name').value||'').trim().slice(0,24)||'שחקן';
+ const score={id:`${Date.now()}-${Math.random().toString(36).slice(2)}`,player,level,outcome,seconds:Math.round(elapsed*100)/100,distance:Math.floor(distance),snacks:totalBones,hearts,at:Date.now()};
+ let storage;try{storage=localStorage;}catch{}const result=appendScore(scores,score,storage);scores=result.scores;scoresPersisted=result.persisted;
+ try{localStorage.setItem('rio-run-player',player);}catch{}
+}
+function returnHome(){
+ if(!runSaved)saveRun('quit');clear();mode='intro';jump=vy=duck=shake=invincible=0;touch=null;rio.material.rotation=0;
+ $('modal').hidden=$('hud').hidden=$('mobile-controls').hidden=$('pause').hidden=$('menu').hidden=$('scores-panel').hidden=true;
+ $('intro').hidden=$('hero-label').hidden=false;document.body.classList.remove('playing');
+ if(best)$('best').textContent=`השיא המקומי שלכם: ${best} מטר`;levelText();start.focus?.();
+}
+function renderScores(){
+ const selected=$('scores-level').value,ranked=leaderboard(scores,selected),history=recentScores(scores,selected);
+ $('scores-empty').hidden=ranked.length>0;$('leaderboard-table').hidden=!ranked.length;$('history-empty').hidden=history.length>0;$('history-table').hidden=!history.length;
+ $('scores-body').innerHTML=ranked.map((s,i)=>`<tr><td>${i+1}</td><td>${escapeHTML(s.player)}</td><td dir="ltr">${formatTime(s.seconds)}</td><td class="table-hearts">${'♥'.repeat(s.hearts)}</td></tr>`).join('');
+ const outcomes={win:'תפסנו את ריו 🏆',loss:'ריו ברח',quit:'המרדף הופסק'};
+ $('history-body').innerHTML=history.map(s=>`<tr><td>${escapeHTML(s.player)}</td><td>${outcomes[s.outcome]}</td><td dir="ltr">${formatTime(s.seconds)}</td><td>${s.snacks}</td><td>${s.distance} מ׳</td></tr>`).join('');
+ $('score-storage-note').textContent=scoresPersisted?'התוצאות נשמרות בדפדפן ובמכשיר הזה. הן אינן משותפות בין מכשירים.':'שמירת התוצאות חסומה בדפדפן הזה. התוצאות יוצגו עד סגירת הדף.';
+}
+function openScores(){
+ if(!$('scores-panel').hidden)return;scoreFocus=document.activeElement;scoreReturnMode=mode;
+ if(mode==='play')mode='paused';$('scores-level').value=level;renderScores();$('scores-panel').hidden=false;$('scores-close').focus?.();
+}
+function closeScores(){
+ if($('scores-panel').hidden)return;$('scores-panel').hidden=true;
+ if(scoreReturnMode==='play'&&mode==='paused')mode='play';scoreFocus?.focus?.();
+}
+function openMenu(){if(mode==='play')pause();else if(mode==='intro')returnHome();}
 function action(a){if(mode!=='play')return;if(a==='left')lane=Math.max(-1,lane-1);if(a==='right')lane=Math.min(1,lane+1);if(a==='jump'&&jump===0){duck=0;vy=8.4;beep(420,.13);}if(a==='duck'&&jump===0){duck=.85;beep(220,.08);}}
+$('menu').onclick=openMenu;$('modal-home').onclick=returnHome;
+$('scores-open').onclick=$('intro-scores').onclick=$('result-scores').onclick=openScores;$('scores-close').onclick=$('scores-back').onclick=closeScores;$('scores-level').onchange=renderScores;
+document.querySelector('.brand').onclick=e=>{e.preventDefault();if(mode==='play'||mode==='paused')openMenu();else returnHome();};
+document.querySelectorAll('.exit-game').forEach(link=>link.onclick=returnHome);
+addEventListener('pagehide',()=>{if(!runSaved)saveRun('quit');});
+addEventListener('pageshow',e=>{if(e.persisted&&mode!=='intro')returnHome();});
 start.onclick=begin;$('restart').onclick=begin;$('pause').onclick=pause;$('resume').onclick=pause;$('sound').onclick=()=>{muted=!muted;$('sound').textContent=muted?'♫':'♪';$('sound').setAttribute('aria-label',muted?'הפעלת צלילים':'השתקת צלילים');$('sound').style.color=muted?'':'#dbfc73';beep();};document.querySelectorAll('[data-level]').forEach(b=>b.onclick=()=>{level=b.dataset.level;document.querySelectorAll('[data-level]').forEach(x=>x.classList.toggle('selected',x===b));levelText();});document.querySelectorAll('[data-action]').forEach(b=>b.onpointerdown=e=>{e.preventDefault();action(b.dataset.action);});
-addEventListener('keydown',e=>{const map={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'jump',' ':'jump',ArrowDown:'duck',a:'left',d:'right',w:'jump',s:'duck'};if(map[e.key]){e.preventDefault();if(!e.repeat)action(map[e.key]);}if(e.key==='Escape')pause();});let touch;renderer.domElement.addEventListener('pointerdown',e=>{touch={x:e.clientX,y:e.clientY};});renderer.domElement.addEventListener('pointerup',e=>{if(!touch)return;const dx=e.clientX-touch.x,dy=e.clientY-touch.y;if(Math.max(Math.abs(dx),Math.abs(dy))>22)action(Math.abs(dx)>Math.abs(dy)?dx>0?'right':'left':dy>0?'duck':'jump');touch=null;});renderer.domElement.addEventListener('pointercancel',()=>touch=null);document.addEventListener('visibilitychange',()=>{if(document.hidden&&mode==='play')pause();});
+addEventListener('keydown',e=>{
+ if(e.key==='Tab'){
+  const panel=!$('scores-panel').hidden?$('scores-panel'):!$('modal').hidden?$('modal'):null;
+  if(panel){const focusable=[...panel.querySelectorAll('button,a[href],select,input')].filter(n=>!n.hidden&&!n.disabled&&n.getClientRects().length),first=focusable[0],last=focusable[focusable.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}
+ }
+ const map={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'jump',' ':'jump',ArrowDown:'duck',a:'left',d:'right',w:'jump',s:'duck'};if(e.key==='Escape'){if(!$('scores-panel').hidden)closeScores();else pause();return;}if(mode!=='play'||/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(e.target?.tagName||''))return;if(map[e.key]){e.preventDefault();if(!e.repeat)action(map[e.key]);}});let touch;renderer.domElement.addEventListener('pointerdown',e=>{touch={x:e.clientX,y:e.clientY};});renderer.domElement.addEventListener('pointerup',e=>{if(!touch)return;const dx=e.clientX-touch.x,dy=e.clientY-touch.y;if(Math.max(Math.abs(dx),Math.abs(dy))>22)action(Math.abs(dx)>Math.abs(dy)?dx>0?'right':'left':dy>0?'duck':'jump');touch=null;});renderer.domElement.addEventListener('pointercancel',()=>touch=null);document.addEventListener('visibilitychange',()=>{if(document.hidden&&mode==='play')pause();});
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();levelText();
-function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000||0,.04);last=now;if(mode!=='paused')clock+=dt;const playing=mode==='play',mobile=innerWidth<700,{speed,interval,stage}=pace(level,elapsed);
+function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000||0,.04);last=now;if(mode!=='paused'&&$('scores-panel').hidden)clock+=dt;const playing=mode==='play',mobile=innerWidth<700,{speed,interval,stage}=pace(level,elapsed);
  if(playing){elapsed+=dt;distance+=speed*dt;spawn-=dt;invincible=Math.max(0,invincible-dt);duck=Math.max(0,duck-dt);shake=Math.max(0,shake-dt*2);if(vy!==0||jump>0){jump+=vy*dt;vy-=22*dt;if(jump<=0){jump=vy=0;}}
  playerX+=(lane*2.7-playerX)*Math.min(1,dt*12);
  if(spawn<0){const plan=wavePlan(level,wave++);obstacle(plan.type,plan.lane,-78);for(const s of plan.snacks){const snackLane=level==='hard'?plan.lane:s.lane;obstacle('bone',snackLane,-78+s.offset);}spawn=interval+Math.random()*.3;}
@@ -64,7 +109,7 @@ function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/10
  if(o.g.position.z>12){disposeObject(o);objects.splice(i,1);}}
  quoteClock+=dt;if(quoteClock>10){say(quotes[Math.floor(Math.random()*quotes.length)]);$('combo').textContent='';}updateHUD();if(bones>=LEVELS[level].target&&mode==='play')finish(true);
  }
- if(mode==='catch'){finishTime+=dt;if(finishTime>1.7){mode='end';$('modal').hidden=false;}}
+ if(mode==='catch'&&$('scores-panel').hidden){finishTime+=dt;if(finishTime>1.7){mode='end';$('modal').hidden=false;$('restart').focus?.();}}
  const moving=playing?speed:mode==='intro'?1.4:0;world.update(dt,moving,objects.filter(o=>o.type==='pit'));
  for(let i=sparks.length-1;i>=0;i--){const p=sparks[i];if(mode!=='paused'){p.life-=dt;p.v.y-=9*dt;p.o.position.addScaledVector(p.v,dt);p.o.scale.setScalar(Math.max(0,p.life));}if(p.life<=0){scene.remove(p.o);p.o.material.dispose();sparks.splice(i,1);}}
  if(mode==='intro'){runner.root.visible=false;camera.position.set(mobile?0:-4,mobile?3.2:3.0,mobile?9:7.5);camera.lookAt(mobile?0:1,1.1,-12);rio.position.set(mobile?.7:2.3,mobile?2.1:2.0,-2);rio.scale.setScalar(mobile?3.5:4.3);}else{

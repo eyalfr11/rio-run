@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {appendScore,readScores,leaderboard,recentScores,formatTime,escapeHTML} from '../dist/scores.js';
+const row=(id,seconds=20,outcome='win',level='easy')=>({id,player:'Rio',level,outcome,seconds,distance:200,snacks:8,hearts:2,at:Number(id)||1});
+test('scores survive reload and corrupted or blocked storage is handled',()=>{let data='';const storage={getItem:()=>data,setItem:(k,v)=>data=v};const saved=appendScore([],row('1'),storage);assert.equal(saved.persisted,true);assert.deepEqual(readScores(storage),saved.scores);data='bad json';assert.deepEqual(readScores(storage),[]);assert.equal(appendScore([],row('2'),{setItem(){throw Error();}}).persisted,false);});
+test('leaderboards rank victories by fastest time independently for each level',()=>{const rows=[row('1',30),row('2',10,'loss'),row('3',15),row('4',5,'win','hard'),row('5',4,'quit')];assert.deepEqual(leaderboard(rows,'easy').map(s=>s.id),['3','1']);assert.equal(recentScores(rows,'easy').length,4);assert.deepEqual(leaderboard(rows,'normal'),[]);});
+test('history is bounded, times are legible and player names cannot inject markup',()=>{const storage={setItem(){}};let scores=[];for(let i=1;i<=120;i++)scores=appendScore(scores,row(String(i)),storage).scores;assert.equal(scores.length,100);assert.equal(scores[0].id,'120');assert.equal(formatTime(61.25),'1:01.3');assert.equal(formatTime(59.99),'1:00.0');assert.equal(escapeHTML('<img onerror="x">'),'&lt;img onerror=&quot;x&quot;&gt;');});

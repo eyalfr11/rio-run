@@ -36,3 +36,13 @@ Collect 8 snacks in Easy, 12 in Normal, or 16 in Hard to catch Rio. Hits cost on
 ## Assets
 
 Attribution and licenses: `dist/assets/CREDITS.txt`, `THREE-LICENSE.txt`, `RUNNER-LICENSE.txt`.
+
+## Menus and results
+
+Use the Menu button or Esc to pause, resume, start over or return to the title screen and choose a different difficulty. The exit link returns to the original Rio website.
+
+Enter an optional player name on the title screen. Completed and abandoned runs appear in Recent results. Each difficulty has its own fastest-victory leaderboard. Scores are saved in this browser's localStorage only; they are not shared across devices.
+
+## Publishing an update
+
+When Netlify is connected to this GitHub repository and deploys `main`, a new commit on `main` normally starts a new production deployment automatically. In the existing Netlify project, check Deploys. If necessary, use Trigger deploy > Deploy site (or the equivalent Deploy without cache action). Keep the publish directory set to `dist` and the build command empty.
